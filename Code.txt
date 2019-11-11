@@ -1,0 +1,142 @@
+var spatialFiltered = image.filterBounds(River);
+print('spatialFiltered', spatialFiltered);
+
+var temporalFiltered = spatialFiltered.filterDate('2015-01-01','2015-12-31');
+print('temporalFiltered', temporalFiltered);
+
+var sorted = temporalFiltered.sort('CLOUD_COVER');
+
+var scene = ee.Image(sorted.first());
+
+Map.centerObject(scene,10);
+Map.addLayer(scene, {bands: ['B4', 'B3', 'B2'], max: 0.4}, 'true colour composite');
+
+Map.addLayer(scene, {bands: ['B5', 'B4', 'B3'], max: 0.4}, 'false colour composite');
+
+//MERGING =======================================================================//
+var newfc = water.merge(urban).merge(vegetation);
+print('mergeCollection', newfc);
+
+var bands = ['B2', 'B3', 'B4', 'B5', 'B6', 'B7'];
+var training = scene.select(bands).sampleRegions({
+  collection: newfc,
+  properties: ['landcover'],
+  scale: 30
+});
+
+print('training', training);
+
+//SUPERVISED CLASSIFICATION: [ CART ]============================================//
+var classifier = ee.Classifier.cart().train({
+  features: training,
+  classProperty: 'landcover',
+  inputProperties: bands
+});
+
+var classified = scene.select(bands).classify(classifier);
+
+Map.addLayer(classified,
+{min: 0, max:2, palette: ['0000FF', 'FF0000', '00FF00']},
+'SUPERVISED: CART');
+
+Map.addLayer(newfc);
+
+//STATISTICS=====================================================================//
+
+var trainAccuracy = classifier.confusionMatrix();
+print('Resubstitution error matrix',trainAccuracy);
+print('Training Overall Accuracy',trainAccuracy.accuracy());
+print('Training Kappa Accuracy',trainAccuracy.kappa());
+print('Training Consumer Accuracy',trainAccuracy.consumersAccuracy());
+print('Training Producers Accuracy',trainAccuracy.producersAccuracy());
+
+
+//UNSUPERVISED CLASSIFICATION: [ K-MEAN ]========================================//
+var region = ee.Geometry.Rectangle(80.186077, 26.438926, 80.4522, 26.55388);
+
+Map.setCenter(80.3128, 26.50522, 10);
+
+var training = scene.sample({
+  region: region,
+  scale: 30,
+  numPixels: 5000
+});
+
+var clusterer3 = ee.Clusterer.wekaKMeans(3).train(training);
+var result3 = scene.cluster(clusterer3);
+Map.addLayer(result3.randomVisualizer(),{},'UNSUPERVISED: KMEAN [3]Clusters');
+
+var clusterer5 = ee.Clusterer.wekaKMeans(5).train(training);
+var result5 = scene.cluster(clusterer5);
+Map.addLayer(result5.randomVisualizer(),{},'UNSUPERVISED: KMEAN [5]Clusters');
+
+var clusterer7 = ee.Clusterer.wekaKMeans(7).train(training);
+var result7 = scene.cluster(clusterer7);
+Map.addLayer(result7.randomVisualizer(),{},'UNSUPERVISED: KMEAN [7]Clusters');
+
+var clusterer9 = ee.Clusterer.wekaKMeans(9).train(training);
+var result9 = scene.cluster(clusterer9);
+Map.addLayer(result9.randomVisualizer(),{},'UNSUPERVISED: KMEAN [9]Clusters');
+
+
+//SUPERVISED: [ SVM ]=============================================================//
+var trainingsvm = scene.select(bands).sampleRegions({
+  collection: newfc,
+  properties: ['landcover'],
+  scale: 30
+});
+
+var classifiersvm = ee.Classifier.svm({
+  kernelType: 'RBF',
+  gamma: 0.5,
+  cost: 10
+});
+
+var trained = classifiersvm.train(trainingsvm, 'landcover', bands);
+var classifiedsvm = scene.classify(trained);
+
+Map.addLayer(classifiedsvm,
+{min: 0, max:2, palette: ['00FFFF', 'FF0000', '00FF00']},
+'SUPERVISED: SVM');
+
+//SUPERVISED: [ RF ]=============================================================//
+var trainingrf = scene.select(bands).sampleRegions({
+  collection: newfc,
+  properties: ['landcover'],
+  scale: 30
+});
+
+var classifierrf = ee.Classifier.randomForest(3)
+    .train(trainingrf, 'landcover',bands);
+
+var classifiedrf = scene.classify(classifierrf);
+
+Map.addLayer(classifiedrf,
+{min: 0, max:2, palette: ['0000FF', 'FF0000', '33280D']},
+'SUPERVISED: RF');
+
+//UNSUPERVISED CLASSIFICATION: [ CASCADE K-MEAN ]======================================//
+
+var clustererck = ee.Clusterer.wekaCascadeKMeans().train(training);
+var resultck = scene.cluster(clustererck);
+Map.addLayer(resultck.randomVisualizer(),{},'UNSUPERVISED: CASCADEKMEAN');
+
+//UNSUPERVISED CLASSIFICATION: [ COB-WEB ]======================================//
+
+var clusterercw = ee.Clusterer.wekaCobweb().train(training);
+var resultcw = scene.cluster(clusterercw);
+Map.addLayer(resultcw.randomVisualizer(),{},'UNSUPERVISED: COBWEB');
+
+//UNSUPERVISED CLASSIFICATION: [ LVQ ]======================================//
+
+var clustererlvq = ee.Clusterer.wekaLVQ().train(training);
+var resultlvq = scene.cluster(clustererlvq);
+Map.addLayer(resultlvq.randomVisualizer(),{},'UNSUPERVISED: LVQ');
+
+//UNSUPERVISED CLASSIFICATION: [ X-MEAN ]======================================//
+
+var clustererxm = ee.Clusterer.wekaXMeans().train(training);
+var resultxm = scene.cluster(clustererxm);
+Map.addLayer(resultxm.randomVisualizer(),{},'UNSUPERVISED: X-Means');
+
+//===============================================================================//
