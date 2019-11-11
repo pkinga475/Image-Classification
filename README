@@ -1,0 +1,7 @@
+This code works only in Google Earth Engine Code Editor, but user can get the idea of working algorithm behing different classification techniques.
+1. Load: Any Satellite Data and Rename it as 'image'
+2. Create a marker and rename it as 'river'.
+3. Create Geometries with name: 'water','urban','vegetation', then only supervised algorithms will run
+4. A mask will be created around this marker [Grid in form of Path/Row: WRS-2 Guideline].
+5. Supervised Algorithms used: CART, SVM, RF
+6. Unsupervised Algortihms used: K-Mean, X-Mean, Cascade K-Mean, Cob-Web, LVQ
